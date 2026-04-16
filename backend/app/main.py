@@ -1,5 +1,7 @@
 import mysql.connector
 import jwt
+print(jwt.__file__)
+print(hasattr(jwt, "encode"))
 from datetime import datetime, timedelta
 
 from fastapi import FastAPI, HTTPException, Depends, Header
@@ -119,42 +121,50 @@ def register(user: RegisterUser):
 # ----------------------------
 @app.post("/login")
 def login(user: LoginUser):
-    db = get_db()
-    cursor = db.cursor(dictionary=True)
+    try:
+        db = get_db()
+        cursor = db.cursor(dictionary=True)
 
-    query = "SELECT * FROM users WHERE email=%s"
-    cursor.execute(query, (user.email,))
-
-    db_user = cursor.fetchone()
-
-    if not db_user:
-        raise HTTPException(
-            status_code=404,
-            detail="User not found"
+        cursor.execute(
+            "SELECT * FROM users WHERE email=%s",
+            (user.email,)
         )
 
-    if db_user["password"] != user.password:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid password"
+        db_user = cursor.fetchone()
+
+        if not db_user:
+            raise HTTPException(
+                status_code=404,
+                detail="User not found"
+            )
+
+        if str(db_user["password"]).strip() != str(user.password).strip():
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid password"
+            )
+
+        token = jwt.encode(
+            {
+                "user_id": int(db_user["id"]),
+                "email": db_user["email"],
+                "exp": datetime.utcnow() + timedelta(hours=2)
+            },
+            SECRET_KEY,
+            algorithm="HS256"
         )
 
-    token = jwt.encode(
-        {
-            "user_id": db_user["id"],
-            "email": db_user["email"],
-            "exp": datetime.utcnow() + timedelta(hours=2)
-        },
-        SECRET_KEY,
-        algorithm="HS256"
-    )
+        return {
+            "message": "Login successful",
+            "token": token
+        }
 
-    return {
-        "message": "Login successful",
-        "token": token
-    }
-
-
+    except Exception as e:
+        print("LOGIN ERROR:", e)
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+        )
 # ----------------------------
 # CREATE TASK
 # ----------------------------
